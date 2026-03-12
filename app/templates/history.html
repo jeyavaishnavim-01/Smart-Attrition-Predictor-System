@@ -1,0 +1,125 @@
+{% extends "base.html" %}
+{% block title %}History{% endblock %}
+
+{% block content %}
+
+<!-- ── Page Header ── -->
+<div class="page-header fade-up">
+  <div class="page-title">Prediction History</div>
+  <div class="page-sub">Every prediction is saved automatically to a local SQLite database</div>
+</div>
+
+<!-- ── Summary Stats ── -->
+<div class="stat-grid fade-up" style="grid-template-columns:repeat(3,1fr);margin-bottom:2rem;">
+  <div class="stat-card" style="--accent-color:var(--blue)">
+    <div class="stat-val">{{ total }}</div>
+    <div class="stat-lbl">Total Predictions</div>
+  </div>
+  <div class="stat-card" style="--accent-color:var(--rose)">
+    <div class="stat-val">{{ leaving }}</div>
+    <div class="stat-lbl">High Risk</div>
+  </div>
+  <div class="stat-card" style="--accent-color:var(--emerald)">
+    <div class="stat-val">{{ total - leaving }}</div>
+    <div class="stat-lbl">Likely to Stay</div>
+  </div>
+</div>
+
+<!-- ── Prediction Table ── -->
+{% if rows %}
+
+<!-- Search/filter bar -->
+<div class="fade-up" style="margin-bottom:1rem;display:flex;gap:0.75rem;align-items:center;">
+  <input id="searchInput" type="text" placeholder="🔍  Filter by department, role, or result…"
+    oninput="filterTable()"
+    style="flex:1;background:var(--card);border:1px solid var(--border);border-radius:8px;
+           color:var(--text);padding:0.6rem 1rem;font-size:0.88rem;
+           font-family:'Outfit',sans-serif;outline:none;
+           transition:border-color .15s;" />
+  <span id="rowCount" style="font-size:0.8rem;color:var(--text-3);white-space:nowrap;">
+    {{ rows|length }} records
+  </span>
+</div>
+
+<div class="table-wrap fade-up">
+  <table id="historyTable">
+    <thead>
+      <tr>
+        <th>#</th>
+        <th>Timestamp</th>
+        <th>Dept</th>
+        <th>Job Role</th>
+        <th>Income</th>
+        <th>OT</th>
+        <th>sklearn</th>
+        <th>TF</th>
+        <th>PyTorch</th>
+        <th>Avg</th>
+        <th>Result</th>
+        <th>Risk</th>
+      </tr>
+    </thead>
+    <tbody>
+      {% for r in rows %}
+      <tr>
+        <td class="mono" style="color:var(--text-3);">{{ r[0] }}</td>
+        <td class="mono" style="color:var(--text-3);font-size:0.75rem;">{{ r[1] }}</td>
+        <td>{{ r[3] }}</td>
+        <td>{{ r[4] }}</td>
+        <td class="mono">${{ r[5] | int }}</td>
+        <!-- Overtime: highlight Yes in amber -->
+        <td>
+          {% if r[6] == 'Yes' %}
+            <span style="color:var(--amber);font-weight:600;">Yes</span>
+          {% else %}
+            <span style="color:var(--text-3);">No</span>
+          {% endif %}
+        </td>
+        <!-- Individual model probabilities -->
+        <td class="mono">{{ "%.0f"|format(r[7] * 100) }}%</td>
+        <td class="mono">{{ "%.0f"|format(r[8] * 100) }}%</td>
+        <td class="mono">{{ "%.0f"|format(r[9] * 100) }}%</td>
+        <!-- Consensus average -->
+        <td class="mono" style="font-weight:600;">{{ "%.0f"|format(r[10] * 100) }}%</td>
+        <td><span class="badge badge-{{ r[11] | lower }}">{{ r[11] }}</span></td>
+        <td><span class="badge badge-{{ r[12] | lower }}">{{ r[12] }}</span></td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+</div>
+
+<!-- JS: live search filter -->
+<script>
+  /**
+   * filterTable()
+   * Filters table rows in real-time based on the search input.
+   * Searches across all cell text content.
+   */
+  function filterTable() {
+    const query = document.getElementById('searchInput').value.toLowerCase();
+    const rows  = document.querySelectorAll('#historyTable tbody tr');
+    let visible = 0;
+
+    rows.forEach(row => {
+      const match = row.textContent.toLowerCase().includes(query);
+      row.style.display = match ? '' : 'none';
+      if (match) visible++;
+    });
+
+    document.getElementById('rowCount').textContent = `${visible} records`;
+  }
+</script>
+
+{% else %}
+<!-- Empty state -->
+<div class="card fade-up" style="text-align:center;padding:4rem;color:var(--text-3);">
+  <div style="font-size:2rem;margin-bottom:1rem;">📭</div>
+  <div style="font-size:1rem;margin-bottom:1.5rem;">No predictions yet.</div>
+  <a href="/predict" class="btn btn-primary" style="width:auto;padding:0.7rem 2rem;">
+    ◈ &nbsp;Make your first prediction
+  </a>
+</div>
+{% endif %}
+
+{% endblock %}
