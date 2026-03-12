@@ -1,0 +1,277 @@
+{% extends "base.html" %}
+{% block title %}Predict{% endblock %}
+
+{% block content %}
+
+<!-- ──Page Header── -->
+<div class="page-header fade-up">
+  <div class="page-title">Predict Attrition</div>
+  <div class="page-sub">Enter employee details — all 3 models run simultaneously and return a consensus</div>
+</div>
+
+<!-- ══════════════════════════════════════════════
+     RESULT SECTION  (only shown after form submit)
+══════════════════════════════════════════════ -->
+{% if result %}
+
+  <!-- Error state -->
+  {% if result.error %}
+    <div class="alert-error fade-up">⚠️ {{ result.error }}</div>
+
+  <!-- Success state -->
+  {% else %}
+
+    <!-- Verdict banner -->
+    <div class="result-box result-{{ result.prediction | lower }} fade-up">
+      <div class="result-headline">
+        {% if result.prediction == 'Leave' %}⚠️ Likely to Leave{% else %}✅ Likely to Stay{% endif %}
+      </div>
+      <div style="color:var(--text-2);font-size:0.9rem;">
+        Consensus probability &nbsp;
+        <strong style="color:var(--text);font-family:'JetBrains Mono',monospace;">
+          {{ (result.avg * 100) | round(1) }}%
+        </strong>
+        &nbsp;·&nbsp; Risk &nbsp;
+        <span class="badge badge-{{ result.risk | lower }}">{{ result.risk }}</span>
+      </div>
+    </div>
+
+    <!-- Per-model breakdown -->
+    <div class="section-title fade-up">Model Breakdown</div>
+    <div class="grid-3 fade-up" style="margin-bottom:2rem;">
+      {% for label, prob, color in [
+          ('scikit-learn', result.sk, '#3b82f6'),
+          ('TensorFlow',   result.tf, '#8b5cf6'),
+          ('PyTorch',      result.pt, '#10b981')
+      ] %}
+      <div class="card">
+        <div style="font-size:0.75rem;font-weight:700;color:{{ color }};
+                    text-transform:uppercase;letter-spacing:1px;margin-bottom:0.6rem;">
+          {{ label }}
+        </div>
+        <div style="font-size:2rem;font-weight:800;
+                    font-family:'JetBrains Mono',monospace;color:var(--text);">
+          {{ (prob * 100) | round(1) }}%
+        </div>
+        <div class="bar-track">
+          <div class="bar-fill"
+               style="width:{{ (prob * 100) | round(1) }}%;background:{{ color }};">
+          </div>
+        </div>
+        <div style="margin-top:0.5rem;font-size:0.78rem;color:var(--text-3);">
+          {% if prob >= 0.5 %}🔴 Leave{% else %}🟢 Stay{% endif %}
+        </div>
+      </div>
+      {% endfor %}
+    </div>
+
+    <!-- ── AI Insights ── -->
+    <div class="section-title fade-up">AI-Powered HR Insights</div>
+
+    <!-- API key input -->
+    <div class="fade-up" style="margin-bottom:0.8rem;">
+      <input id="apiKey" type="password"
+        placeholder="Paste your GROQ API key to unlock AI recommendations (optional)"
+        style="width:100%;background:var(--bg);border:1px solid var(--border);
+               border-radius:8px;color:var(--text);padding:0.65rem 1rem;
+               font-size:0.88rem;font-family:'Outfit',sans-serif;outline:none;
+               transition:border-color .15s;" />
+    </div>
+
+    <!-- Generate button — shows spinner while loading -->
+    <button id="aiBtn" onclick="getInsights()" class="btn btn-ai fade-up"
+            style="margin-bottom:1rem;width:auto;padding:0.7rem 1.5rem;">
+      ✦ &nbsp;Generate AI Recommendations
+    </button>
+
+    <!-- AI result appears here -->
+    <div id="ai-area"></div>
+
+    <!-- Back link -->
+    <div style="margin-top:2rem;">
+      <a href="/predict" class="btn btn-ghost">← New Prediction</a>
+    </div>
+
+    <script>
+      /**
+       * getInsights()
+       * Sends employee data + prediction result to /api/ai
+       * then displays Claude's HR recommendations.
+       */
+      async function getInsights() {
+        const key  = document.getElementById('apiKey').value.trim();
+        const area = document.getElementById('ai-area');
+        const btn  = document.getElementById('aiBtn');
+
+        // Validate key present
+        if (!key) {
+          area.innerHTML = '<div class="alert-error">Please enter your GROQ API key above.</div>';
+          return;
+        }
+
+        // Show loading state
+        btn.disabled = true;
+        btn.innerHTML = '<div class="spinner"></div> &nbsp;Generating…';
+        area.innerHTML = '';
+
+        try {
+          const res = await fetch('/api/ai', {
+            method:  'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              api_key:  key,
+              employee: {{ result.employee | tojson }},
+              result:   { risk: '{{ result.risk }}', avg: {{ result.avg }} }
+            })
+          });
+
+          const data = await res.json();
+
+          if (data.error) {
+            area.innerHTML = `<div class="alert-error">Error: ${data.error}</div>`;
+            showToast("AI request failed", "error");
+          } else {
+            area.innerHTML = `<div class="ai-output">${data.insights}</div>`;
+            showToast("AI insights ready!", "success");
+          }
+
+        } catch (err) {
+          area.innerHTML = `<div class="alert-error">Request failed: ${err}</div>`;
+          showToast("Network error", "error");
+        } finally {
+          // Restore button regardless of success/failure
+          btn.disabled = false;
+          btn.innerHTML = '✦ &nbsp;Generate AI Recommendations';
+        }
+      }
+    </script>
+
+  {% endif %}
+{% endif %}
+
+
+<!-- ══════════════════════════════════════════════
+     PREDICTION FORM  (shown when no result yet)
+══════════════════════════════════════════════ -->
+{% if not result or result.error %}
+<div class="form-box fade-up">
+  <form method="POST" action="/predict" id="predictForm">
+
+    <!-- Personal details -->
+    <div class="section-title">👤 Personal</div>
+    <div class="form-grid">
+      <div class="field">
+        <label>Age</label>
+        <input type="number" name="Age" value="32" min="18" max="60">
+      </div>
+      <div class="field">
+        <label>Gender</label>
+        <select name="Gender">
+          <option>Male</option>
+          <option>Female</option>
+        </select>
+      </div>
+      <div class="field">
+        <label>Marital Status</label>
+        <select name="MaritalStatus">
+          <option>Single</option>
+          <option>Married</option>
+          <option>Divorced</option>
+        </select>
+      </div>
+    </div>
+
+    <!-- Job details -->
+    <div class="section-title">💼 Job</div>
+    <div class="form-grid">
+      <div class="field">
+        <label>Department</label>
+        <select name="Department">
+          <option>Sales</option>
+          <option>Research &amp; Development</option>
+          <option>Human Resources</option>
+        </select>
+      </div>
+      <div class="field">
+        <label>Job Role</label>
+        <select name="JobRole">
+          <option>Sales Executive</option>
+          <option>Research Scientist</option>
+          <option>Laboratory Technician</option>
+          <option>Manufacturing Director</option>
+          <option>Healthcare Representative</option>
+          <option>Manager</option>
+          <option>Sales Representative</option>
+          <option>Research Director</option>
+        </select>
+      </div>
+      <div class="field">
+        <label>Business Travel</label>
+        <select name="BusinessTravel">
+          <option>Non-Travel</option>
+          <option>Travel_Rarely</option>
+          <option>Travel_Frequently</option>
+        </select>
+      </div>
+      <div class="field">
+        <label>Job Level (1–5)</label>
+        <input type="number" name="JobLevel" value="2" min="1" max="5">
+      </div>
+      <div class="field">
+        <label>Job Satisfaction (1–4)</label>
+        <input type="number" name="JobSatisfaction" value="3" min="1" max="4">
+      </div>
+      <div class="field">
+        <label>Overtime</label>
+        <select name="OverTime">
+          <option>No</option>
+          <option>Yes</option>
+        </select>
+      </div>
+    </div>
+
+    <!-- Compensation & tenure -->
+    <div class="section-title">💰 Compensation &amp; Tenure</div>
+    <div class="form-grid">
+      <div class="field">
+        <label>Monthly Income ($)</label>
+        <input type="number" name="MonthlyIncome" value="5000" min="1000" max="20000">
+      </div>
+      <div class="field">
+        <label>Years at Company</label>
+        <input type="number" name="YearsAtCompany" value="3" min="0" max="40">
+      </div>
+      <div class="field">
+        <label>Total Working Years</label>
+        <input type="number" name="TotalWorkingYears" value="5" min="0" max="40">
+      </div>
+      <div class="field">
+        <label>Work-Life Balance (1–4)</label>
+        <input type="number" name="WorkLifeBalance" value="3" min="1" max="4">
+      </div>
+      <div class="field">
+        <label>Env. Satisfaction (1–4)</label>
+        <input type="number" name="EnvironmentSatisfaction" value="3" min="1" max="4">
+      </div>
+      <div class="field">
+        <label>Stock Option Level (0–3)</label>
+        <input type="number" name="StockOptionLevel" value="0" min="0" max="3">
+      </div>
+      <div class="field">
+        <label>Distance from Home (km)</label>
+        <input type="number" name="DistanceFromHome" value="5" min="1" max="30">
+      </div>
+    </div>
+
+    <!-- Submit button — shows spinner while form submits -->
+    <button type="submit" class="btn btn-primary" id="submitBtn"
+            onclick="this.innerHTML='<div class=\'spinner\'></div> &nbsp;Predicting…';
+                     this.disabled=true; document.getElementById('predictForm').submit();">
+      ◈ &nbsp;Predict Attrition Risk
+    </button>
+
+  </form>
+</div>
+{% endif %}
+
+{% endblock %}
